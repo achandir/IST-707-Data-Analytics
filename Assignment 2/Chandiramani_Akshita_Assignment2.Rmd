@@ -1,0 +1,121 @@
+---
+title: Assignment 2 
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Clustering and Decision Trees
+
+#### 1) Loading required libraries:
+
+```{r}
+library(caret)
+library(rpart)
+library(factoextra)
+``` 
+
+#### 2) Reading and scaling input data:
+
+```{r}
+data <- read.csv("C:\\Users\\akshi\\OneDrive\\Desktop\\Disputed_Essay_data.csv")
+essays <- na.omit(data)
+df <- scale(essays[c(-1,-2)], center = T, scale = T)
+``` 
+ 
+#### 3) Generating elbow curve to determine number of centroids:
+```{r}
+
+
+set.seed(3)
+wss <- function(k){
+  return(kmeans(df, k, nstart = 25)$tot.withinss)
+}
+
+k_values <- 1:7
+
+wss_values <- purrr::map_dbl(k_values, wss)
+
+plot(x = k_values, y = wss_values, 
+     type = "b", frame = F,
+     xlab = "Number of clusters K",
+     ylab = "Total within-clusters sum of square")
+``` 
+
+#### 4) Running k-means clustering with 3 centroids
+```{r}
+set.seed(1)
+km_output <- kmeans(na.omit(df), centers = 3, iter.max = 100, algorithm = "Hartigan-Wong")
+str(km_output)
+fviz_cluster(km_output, data = df)
+#10 out of 11 disputed essays belong to cluster 2
+km_output$cluster[which(essays$author == 'dispt')] #Checking cluster of disputed essays
+#Most of Hamilton's essays belong to cluster 3
+km_output$cluster[which(essays$author == 'Hamilton')] #Checking cluster of Hamilton's essays
+#Most of Madison's essays belong to cluster 2
+km_output$cluster[which(essays$author == 'Madison')] #Checking cluster of Madison's essays
+#All essays written by Hamilton and Madison belong to cluster 1
+km_output$cluster[which(essays$author == 'HM')] #Checking cluster of HM's essays
+```
+
+##### According to the clustering - disputed article no. 2 belongs to Hamilton and Madison (HM) while the rest of the articles belong to Madison
+
+
+#### 4) Running decision tree model
+```{r}
+#dividing data into train and test to run decision trees model
+
+#training data set contains all essays that are not disputed, this will help the model be trained to differentiate between essays from different authors
+df_train <- essays[ which(essays$author!='dispt'), ]
+df_train$author <- factor(df_train$author)
+
+#testing data set contains all essays that are disputed. When the model is run on the test data, it will help the model predict whether a disputed essay is Hamilton's or Madison's
+df_test <- essays[ which(essays$author=='dispt'), ]
+
+#Running decision tree model to measure accuracy while predicting author of an essay
+#set.seed(50)
+dt_model <- train(author ~ ., data = df_train, metric = "Accuracy", 
+                  method = "rpart")
+print(dt_model)
+print(dt_model$finalModel)
+
+```
+##### Highest accuracy achieved is 0.8832 (88.32%) at cp = 0.2173913 with kappa = 0.7420939
+
+```{r}
+#Predicting propability of authors of essay using built model
+dt_predict <- predict(dt_model, newdata = df_test, na.action = na.omit, type = "prob")
+head(dt_predict, 5)
+#Predicting author of essay using built model
+dt_predict2 <- predict(dt_model, newdata = df_test, type = "raw")
+head(dt_predict2,11)
+``` 
+
+##### According to the model - All disputed articles belong to Madison
+
+#### 5) Tuning the model:
+```{r}
+
+#Running decision tree model to measure accuracy while predicting author of an essay
+#set.seed(12)
+dt_tune_model <- train(author ~ ., data = df_train, metric = "Accuracy", 
+                       method = "rpart", tuneLength = 10)
+print(dt_tune_model)
+print(dt_tune_model$finalModel)
+``` 
+##### Highest accuracy achieved after tuning is 0.8574 (85.74%) at cp = 0.20289855 with kappa = 0.7010943 which is lesser than the model above (without tuning)
+
+```{r}
+dt_tune_predict <- predict(dt_tune_model, newdata = df_test, na.action = na.omit, type = "prob")
+head(dt_tune_predict, 5)
+
+dt_tune_predict2 <- predict(dt_tune_model, newdata = df_test, type = "raw")
+head(dt_tune_predict2,11)
+```
+##### According to the tuned model - All disputed articles belong to Madison
+
+##### After performing clustering and decision tree modeling, both outcomes predict 10 out of 11 articles to belong to Madison. In decision tree modeling even no. 7 is predicted to belong to Madison, whereas in clustering, it is a part of cluster containing articles belonging to both Madison and Hamilton(HM), but this could mean that the article could be similar to Madison or Hamilton individually. 
