@@ -1,0 +1,142 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+# IST 707 Assignment
+
+### HW 1 - Association Rule Mining
+
+#### 1) Data Loading
+```{r}
+library('arules')
+data('AdultUCI')
+```
+
+#### 2) Data Exploration
+
+
+##### Reviewing Structure and Summary of data
+```{r}
+str(AdultUCI)
+summary(AdultUCI)
+```
+  
+  
+##### Viewing top entries in the data
+```{r}
+knitr::kable(head(AdultUCI))
+```
+  
+##### Discretizing columns  
+  
+1. age
+```{r}
+q <- quantile(AdultUCI$age, c(0.4, 0.6))
+AdultUCI$AgeBuckets <- replicate(length(AdultUCI$age), "Middle-aged")
+AdultUCI$AgeBuckets[AdultUCI$age <= q[1]] <- "Young"
+AdultUCI$AgeBuckets[AdultUCI$age > q[2]] <- "Old"
+AdultUCI$AgeBuckets <- as.factor(AdultUCI$AgeBuckets)
+str(AdultUCI$AgeBuckets)
+```  
+2. fnlwgt
+```{r}
+q <- quantile(AdultUCI$fnlwgt, c(0.4, 0.6))
+AdultUCI$fnlwgtBuckets <- replicate(length(AdultUCI$fnlwgt), "Average")
+AdultUCI$fnlwgtBuckets[AdultUCI$fnlwgt <= q[1]] <- "Low"
+AdultUCI$fnlwgtBuckets[AdultUCI$fnlwgt > q[2]] <- "High"
+AdultUCI$fnlwgtBuckets <- as.factor(AdultUCI$fnlwgtBuckets)
+str(AdultUCI$fnlwgtBuckets)
+```  
+3. capital-gain
+```{r}
+q <- quantile(AdultUCI$`capital-gain`, c(0.4, 0.6))
+AdultUCI$CapitalGainBuckets <- replicate(length(AdultUCI$`capital-gain`), "Average")
+AdultUCI$CapitalGainBuckets[AdultUCI$`capital-gain` <= q[1]] <- "Low"
+AdultUCI$CapitalGainBuckets[AdultUCI$`capital-gain` > q[2]] <- "High"
+AdultUCI$CapitalGainBuckets <- as.factor(AdultUCI$CapitalGainBuckets)
+str(AdultUCI$CapitalGainBuckets)
+```  
+4. capital-loss
+```{r}
+q <- quantile(AdultUCI$`capital-loss`, c(0.4, 0.6))
+AdultUCI$CapitalLossBuckets <- replicate(length(AdultUCI$`capital-loss`), "Average")
+AdultUCI$CapitalLossBuckets[AdultUCI$`capital-loss` <= q[1]] <- "Low"
+AdultUCI$CapitalLossBuckets[AdultUCI$`capital-loss` > q[2]] <- "High"
+AdultUCI$CapitalLossBuckets <- as.factor(AdultUCI$CapitalLossBuckets)
+str(AdultUCI$CapitalLossBuckets)
+```  
+5. hours-per-week
+```{r}
+q <- quantile(AdultUCI$`hours-per-week`, c(0.4, 0.6))
+AdultUCI$HoursPerWeekBuckets <- replicate(length(AdultUCI$`hours-per-week`), "Average")
+AdultUCI$HoursPerWeekBuckets[AdultUCI$`hours-per-week` <= q[1]] <- "Low"
+AdultUCI$HoursPerWeekBuckets[AdultUCI$`hours-per-week` > q[2]] <- "High"
+AdultUCI$HoursPerWeekBuckets <- as.factor(AdultUCI$HoursPerWeekBuckets)
+str(AdultUCI$HoursPerWeekBuckets)
+```
+
+##### Checking for duplicated data
+```{r}
+head(AdultUCI[duplicated(AdultUCI),],2)
+```
+##### Removing duplicate data
+```{r}
+AdultUCI_WithoutDuplicates <- AdultUCI[!duplicated(AdultUCI),]
+nrow(AdultUCI) #with duplicates
+nrow(AdultUCI_WithoutDuplicates) #without duplicates
+```
+
+##### Checking for NA values
+```{r}
+
+colnames(AdultUCI_WithoutDuplicates)[colSums(is.na(AdultUCI_WithoutDuplicates)) > 0]
+
+```
+  
+##### Replacing NAs
+```{r}
+AdultUCI_WithoutDuplicates[is.na(AdultUCI_WithoutDuplicates$workclass),]$workclass <- 'no workclass'
+AdultUCI_WithoutDuplicates[is.na(AdultUCI_WithoutDuplicates$occupation), ]$occupation <- 'no occupation'
+AdultUCI_WithoutDuplicates[is.na(AdultUCI_WithoutDuplicates$`native-country`), ]$`native-country` <- 'United-States'
+AdultUCI_WithoutDuplicates[is.na(AdultUCI_WithoutDuplicates$income), ]$income <- 'no income'
+```
+
+
+##### Setting final dataset
+```{r}
+AdultUCI_WithoutDuplicates$`education-num` <- as.factor(AdultUCI_WithoutDuplicates$`education-num`)
+AdultUCIFinal <- AdultUCI_WithoutDuplicates[,c(2,4,5,6,7,8,9,10,14,15,16,17,18,19,20)]
+```
+#### 3) Running apriori with default settings
+```{r}
+AdultUCI_Rules_1 <- apriori(AdultUCIFinal)
+AdultUCI_Rules_1 <- sort (AdultUCI_Rules_1, by="confidence",decreasing=TRUE)
+inspect(head(AdultUCI_Rules_1,5) )
+```
+#### 4) Running apriori with support = 0.1 and confidence = 0.5
+```{r}
+AdultUCI_Rules_2 <- apriori(AdultUCIFinal, parameter = list(supp = 0.1, conf = 0.5))
+AdultUCI_Rules_2 <- sort (AdultUCI_Rules_2, by="confidence",decreasing=TRUE)
+inspect(head(AdultUCI_Rules_2,5) )
+```
+#### 5) Running apriori with support = 0.5 and confidence = 0.5
+```{r}
+AdultUCI_Rules_3 <- apriori(AdultUCIFinal, parameter = list(supp = 0.5, conf = 0.5))
+AdultUCI_Rules_3 <- sort (AdultUCI_Rules_3, by="confidence",decreasing=TRUE)
+inspect(head(AdultUCI_Rules_3,5) )
+```
+#### 6) Running apriori to predict income
+```{r}
+AdultUCI_Rules_4 <- apriori(AdultUCIFinal, parameter=list (supp=0.1,conf = 0.5, maxtime = 10), appearance = list (default="lhs",rhs=c("income=small","income=large")))
+AdultUCI_Rules_4 <- sort (AdultUCI_Rules_4, by="confidence",decreasing=TRUE)
+inspect(head(AdultUCI_Rules_4,5))
+```
+##### Evaluating rules :  The first few rules with highest confidence state that when marital-status is 'never married', age is 'young', capital gain and loss is 'low', and hours per week is 'low', then the income is 'low'. This rule makes sense because a young person working for less hours will recieve a low income.
+
+#### 7) Shiny app for Apriori
+#####https://achandir.shinyapps.io/Assignment1/
