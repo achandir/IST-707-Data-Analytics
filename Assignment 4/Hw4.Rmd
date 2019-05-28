@@ -1,0 +1,238 @@
+---
+title: "IST 707 Data Analytics - HW4 - Regression and Artificial Neural Networks"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Section 1: Introduction and Data Pre-processing
+
+A kaggle dataset on student academic performance is gathered to identify the influential
+factors for students’ performance. To predict the students’ performance, the collected data was organized into four kinds of features: demographic, academic background, parents’ participation on learning process and behavioral features. 
+
+The demographic features consisted of demographic details of the students like gender,
+nationality, place of birth etc. The section, grades and semester details of the students were included under the academic features and behavioral features consisted of fields demonstrating students’ engagement with the learning management system like viewed announcements, interaction with discussion groups, resources etc.
+
+To analyze the students’ performance, the target “Class” attribute was discretized into ordinal values based upon students’ grades. Hence, we had three categories of student classes: High/H, Low/L and Medium/M.
+
+The basic classification problem requires modeling the data to predict the "Class" variable which consists of ordinal values L, M and H. The classification needs to be performed using logistic regression and neural networks followed by model comparison.
+
+
+### Loading required libraries
+```{r}
+library(VGAM) #for vglm model
+library(MASS) #for polr model
+library(nnet) #for multinom model
+library(tidyverse) #for data preprocessing
+library(recipes) #for data preprocessing
+library(keras) #for keras model
+library(caret) #for Random Forest
+```
+
+### Reading academic performance data and viewing summary statistics
+```{r}
+#Read academic performance data
+performance = read.csv("C:\\Users\\akshi\\OneDrive\\Desktop\\AcademicPerformance.csv")
+#View summary statistics
+summary(performance)
+```
+
+### Data Pre-processing
+```{r}
+#Convert Class into ordered factors
+performance$Class = factor(performance$Class, levels=c("L","M","H"), ordered=T)
+```
+
+### Split data in testing and training
+```{r}
+#Setting seed
+set.seed(100)
+#Splitting data into 70:30 train and test
+trainingRows <- sample(1:nrow(performance), 0.7 * nrow(performance))
+trainingData <- performance[trainingRows, ]
+testData <- performance[-trainingRows, ]
+```
+
+## Section 2: Logistic Regression
+### Running logistic regression model on training data to predict Class using vglmFit
+```{r}
+#Fitting model on training data to predict Class from all variables except StageID and PlaceofBirth
+vglmFit <- vglm(Class~SectionID+Discussion+VisITedResources+AnnouncementsView+raisedhands+Semester+Relation+Topic+gender+NationalITy+GradeID+StudentAbsenceDays+ParentschoolSatisfaction+ParentAnsweringSurvey, family=propodds, data=trainingData)
+#family = propodds to use the propotional odds model
+
+#Viewing summary of fit model
+deviance(vglmFit) #Deviance is a measure of goodness of fit of a model. Higher numbers always indicates bad fit.
+
+AIC(vglmFit) #AIC estimates the relative amount of information lost by a given model: the less information a model loses, the higher the quality of that model.
+
+#Predicting probabilities of Class for testing data 
+PhatCateg <- predict(vglmFit, testData, type="response")
+
+#Predicting Class for testing data
+categHat <- levels(testData$Class)[max.col(PhatCateg)]
+
+#Confusion Matrix
+table(testData$Class, categHat)
+
+#Misclassification error
+mean(as.character(testData$Class) != as.character(categHat))
+```
+#### Accuracy
+```{r}
+#Accuracy
+mean(as.character(testData$Class) == as.character(categHat))
+
+```
+
+### Running logistic regression model on training data to predict Class using polr
+```{r}
+
+#Fitting model on training data to predict Class from all variables except StageID and PlaceofBirth
+model_fit <- polr(Class~Discussion+SectionID+VisITedResources+
+                    AnnouncementsView+raisedhands+Semester+Relation+Topic+gender+
+                    NationalITy+GradeID+StudentAbsenceDays+ParentschoolSatisfaction+
+                    ParentAnsweringSurvey, data = trainingData, Hess = TRUE)
+#Hess is true since the Hessian (the observed information matrix) should be returned.
+
+#Predicting Class for testing data
+predictedClass <- predict(model_fit, testData)
+
+#Confusion Matrix
+table(testData$Class, predictedClass)
+
+#Misclassification error
+mean(as.character(testData$Class) != as.character(predictedClass))
+```
+#### Accuracy
+```{r}
+#Accuracy
+mean(as.character(testData$Class) == as.character(predictedClass))
+```
+
+## Section 3: Artificial Neural Network
+### Running multinomial regression on training data to predict Class using multinom in nnet library
+
+```{r}
+#Fitting model on training data to predict Class from all variables except StageID and PlaceofBirth
+test <- multinom(Class~Discussion+SectionID+VisITedResources+
+                   AnnouncementsView+raisedhands+Semester+Relation+Topic+gender+
+                   NationalITy+GradeID+StudentAbsenceDays+ParentschoolSatisfaction+
+                   ParentAnsweringSurvey, data = trainingData)
+
+#Predicting probability of Class for testing data
+predicted=predict(test,testData,type="probs")
+
+#Predicting Class for testing data
+predictedCat <- levels(testData$Class)[max.col(predicted)]
+
+#Confusion Matrix
+table(testData$Class, predictedCat)
+
+#Misclassification error
+mean(as.character(testData$Class) != as.character(predictedCat))
+```
+#### Accuracy
+```{r}
+#Accuracy
+mean(as.character(testData$Class) == as.character(predictedCat))
+```
+
+### Data Pre-processing for keras model
+```{r}
+rec_obj <- recipe(Class ~ ., data = trainingData) %>% 
+  step_dummy(all_nominal(), -all_outcomes()) %>%  #converting into dummy variables
+  step_center(all_predictors(), -all_outcomes()) %>%  #centering the data
+  step_scale(all_predictors(), -all_outcomes()) %>% #scaling the data
+  prep(data = trainingData)
+```
+
+### Setting up Keras model
+```{r}
+model <- keras_model_sequential() #setting up keras model
+model %>%
+  layer_flatten(input_shape = ncol(rec_obj)) %>%
+  layer_dense(units = 20, activation = 'relu') %>% #ReLU layer
+  layer_dense(units = 20, activation = 'softmax') #SoftMax layer
+
+#This configuration provides the best results. 
+#Increasing number of units increasing the training accuracy but leads to overfitting and thus
+#lower testing accuracy
+
+model %>% compile(
+  optimizer = 'adam', 
+  loss = 'sparse_categorical_crossentropy',
+  metrics = c('accuracy')
+)
+```
+
+### Separating Dependent and Independent Variables
+```{r}
+x_train_tbl <- bake(rec_obj, new_data = trainingData) %>% dplyr::select(-Class)
+x_test_tbl <- bake(rec_obj, new_data = testData) %>% dplyr::select(-Class)
+
+#Converting Classes into numeric
+y_train_vec <- ifelse(pull(trainingData, Class) == "L", 0, (ifelse(pull(trainingData, Class) == "M",1,(ifelse(pull(trainingData, Class) == "H",2,10)))))
+y_test_vec <-  ifelse(pull(testData, Class) == "L", 0, (ifelse(pull(testData, Class) == "M",1,(ifelse(pull(testData, Class) == "H",2,10)))))
+```
+
+### Fitting keras model on training data and evaluating on testing data
+```{r}
+#Fitting keras model with 200 epochs
+model %>% fit(as.matrix(x_train_tbl), y_train_vec, epochs = 200)
+```
+#### Accuracy
+```{r}
+#Testing keras model
+score <- model %>% evaluate(as.matrix(x_test_tbl), y_test_vec)
+cat('Test loss:', score$loss, "\n")
+cat('Test accuracy:', score$acc, "\n")
+```
+
+## Section 4: Random Forest
+### Random Forest Classification
+```{r}
+#Train Random forest classifier
+model_rf <- train(Class ~ ., data = trainingData, method = "rf")
+model_rf
+
+#Predict using Random forest Classifier
+rf_predict <- predict(model_rf, newdata = testData, type = "raw")
+
+#Confusion Matrix
+table(testData$Class, rf_predict)
+
+#Misclassification error
+mean(as.character(testData$Class) != as.character(rf_predict))
+```
+#### Accuracy
+```{r}
+#Accuracy
+mean(as.character(testData$Class) == as.character(rf_predict))
+```
+
+## Section 5: Algorithm Performance Evaluation
+
+Logistic regression achieves an accuracy of 72.9% and a misclassification error of 27.1%
+
+Neural network using multinom achieves an accuracy of 76.3%
+
+Neural network using keras achieves an accuracy of around 78% based on different runs of epochs
+
+Random forest classifier achieves an accuracy of 81.9%
+
+The decision boundaries in logistic regression are linear, whereas in neural network, the boundaries can be non-linear which leads to a better prediction. 
+
+Additionally, Neural networks include back-propogation which improves the model significantly by going over the data multiple times and minimizing error. 
+
+These reasons are able to explain why neural networks provide a better accuracy than logistic regression.
+
+Random Forest works well with a mixture of numerical and categorical features. When features are on the various scales, it is also fine. Roughly speaking, with Random Forest you can use data as they are.
+
+Random forests are faster and built to be robust to overfitting which could be an issue in neural networks.
+
+Another benefit of random forests over neural network is interpretebility and ease of use. 
+Neural networks take more tuning than random forests and provide a good accuracy but are hard to interpret.
+
+Since Random Forests is robust to overfitting, even though it achieves a low training accuracy, it has the highest testing accuracy among all the applied algorithms.
