@@ -1,0 +1,131 @@
+---
+title: "IST 707 Homework 3"
+output: 
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## NBC, kNN, and SVM
+
+### Introduction 
+#### The goal is to recognize digits 0 to 9 in handwriting images. The dataset provided contains 785
+#### variables - 1 label variable which specifies the digit (between 0-9) and 784 variables which 
+#### represent pixels in a 28x28 image. The value in each of these variables represents the
+#### darkness or lightness of the pixel between 1-256. The classifier will train the model on 
+#### the training data and predict the digit in the testing data
+
+### Loading required libraries:
+
+```{r}
+library(ElemStatLearn)
+library(klaR)
+library(caret)
+library(mlbench)
+library(e1071)
+```
+
+### Reading input data:
+
+```{r}
+digit_training <- read.csv(file="C:\\Users\\akshi\\OneDrive\\Desktop\\Kaggle-digit-train-sample-small.csv")
+```
+
+### Splitting the data into test and train (80:20 split) with a fixed seed for reproducability
+
+```{r}
+set.seed(500)
+train_index <- createDataPartition(digit_training$label, p = 0.8, list = FALSE)
+digit_train <- digit_training[train_index, ]
+digit_test <- digit_training[-train_index, ]
+```
+
+### Converting target variable into a factor for prediction
+
+```{r}
+digit_train$label<- as.factor(digit_train$label)
+digit_test$label<- as.factor(digit_test$label)
+```
+
+### Scaling data between 0 and 1 for Naive Bayes Model
+
+```{r}
+digit_train_nb <- digit_train
+digit_test_nb <- digit_test
+digit_train_nb[,2:785] <- digit_train_nb[,2:785]/255.0
+digit_test_nb[,2:785] <- digit_test_nb[,2:785]/255.0
+```
+
+### Run Naive Bayes model on training data - Default parameters
+
+```{r}
+nb_model_1 <- naiveBayes(digit_train_nb, digit_train_nb$label)
+```
+
+### Predict on test data using Naive Bayes Model
+
+```{r}
+pred <- predict(nb_model_1, digit_test_nb)
+confusionMatrix(pred, digit_test_nb$label)
+```
+#### Reported accuracy: 64.39
+
+### Run Naive Bayes model on training data - Smoothing(fl) = 1, UseKernel = T
+
+```{r}
+nb_model_2 <- train(label ~ ., data = digit_train_nb, method = "nb",
+                trControl = trainControl(method = "none"),
+               tuneGrid = expand.grid(fL = 1, usekernel = T, adjust = 1))
+```
+
+### Predict on test data using Naive Bayes Model
+
+```{r}
+pred <- predict(nb_model_2, digit_test_nb)
+confusionMatrix(pred, digit_test_nb$label)
+```
+#### Reported accuracy: 66.55
+
+### Run KNN model on training data with k 1-25 and repeated cross validation with n=10 and repeats=3
+
+```{r}
+model_knn2 <- train(label ~ ., data = digit_train, method = "knn",
+                    tuneGrid = data.frame(k = seq(1, 25)),
+                    trControl = trainControl(method = "repeatedcv",
+                                             number = 10, repeats = 3))
+print(model_knn2)
+```
+
+### Predict on test data using KNN model
+
+```{r}
+predict_knn2 <- predict(model_knn2, newdata = digit_test)
+confusionMatrix(predict_knn2, digit_test$label)
+```
+#### Reported accuracy: 88.13
+
+### Run SVM model with c between 0-1 with 0.05 intervals and bootstrapping method with n=25
+
+```{r}
+model_svm_linear <- train(label ~ ., data = digit_train,
+                         method = "svmLinear",
+                         trControl = trainControl(method = "boot", number = 25),
+                         tuneGrid = expand.grid(C = seq(0, 1, 0.05)))
+model_svm_linear
+```
+
+### Predict on test data using SVM model
+
+```{r}
+predict_svm_linear <- predict(model_svm_linear, newdata = digit_test)
+confusionMatrix(predict_svm_linear, digit_test$label)
+```
+#### Reported accuracy: 86.33
+
+### The highest accuracy is achieved in KNN model. We have used a range of 1-25 for K, thus there
+### are many iterations to find the right K value. The model also used repeated cross validation
+### which improves the model. SVM linear model is the slowest since bootstrapping method is used with n=25
